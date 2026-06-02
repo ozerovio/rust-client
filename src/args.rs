@@ -629,7 +629,6 @@ pub struct TransferArgs {
     /// Treat amount as a whole token(*10^decimals). Without it amount in base units (dust).
     #[arg(short = 'd', long = "whole-tokens", default_value_t = false)]
     pub whole_tokens: bool,
-    
 
     /// Private key for signing the transfer (hex format)
     #[arg(

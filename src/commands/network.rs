@@ -1,6 +1,6 @@
 use crate::args::*;
-use crate::connection_manager::{ConnectionConfig, F1r3flyConnectionManager};
 use crate::commands::query::query_node_status;
+use crate::connection_manager::{ConnectionConfig, F1r3flyConnectionManager};
 use crate::f1r3fly_api::{F1r3flyApi, ProposeResult};
 use std::fs;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
@@ -414,7 +414,7 @@ pub async fn transfer_command(args: &TransferArgs) -> Result<(), Box<dyn std::er
 
     validate_vault_address(&from_address)?;
     validate_vault_address(&args.to_address)?;
-    
+
     let amount_dust = if args.whole_tokens {
         // Whole-token mode: ask the node how many decimals the native token has.
         let (status_json, _) =
