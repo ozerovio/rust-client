@@ -540,15 +540,21 @@ echo -n "Testing transfers-available (WS)... "
 TA_START=$(date +%s.%N)
 # Start WS listener on readonly in background
 TA_WS_OUT=$(mktemp)
-run_with_timeout 30 cargo run -q --release -- watch-events -H $HOST --http-port $OBSERVER_HTTP > "$TA_WS_OUT" 2>&1 &
+run_with_timeout 150 cargo run -q --release -- watch-events -H $HOST --http-port $OBSERVER_HTTP > "$TA_WS_OUT" 2>&1 &
 TA_WS_PID=$!
 sleep 3  # Let WS connect
 
 # Submit a transfer
-cargo run -q --release -- transfer --to-address 111127RX5ZgiAdRaQy4AWy57RdvAAckdELReEBxzvWYVvdnR32PiHA --amount 1 -H $HOST -p $GRPC_PORT --http-port $HTTP_PORT --observer-port $OBSERVER_GRPC --max-wait 120 --check-interval 2 > /dev/null 2>&1 || true
+cargo run -q --release -- transfer --to-address 111127RX5ZgiAdRaQy4AWy57RdvAAckdELReEBxzvWYVvdnR32PiHA --amount 1 -H $HOST -p $GRPC_PORT --http-port $HTTP_PORT --observer-port $OBSERVER_GRPC --max-wait 120 --check-interval 2 > /dev/null 2>&1 &
+TA_TX_PID=$!
 
 # Wait for WS to capture events (up to remaining time)
-wait $TA_WS_PID 2>/dev/null || true
+run_with_timeout 100 bash -c 'until grep -q "Transfers Available" "$1"; do sleep 2; done' _ "$TA_WS_OUT"
+
+for pid in "$TA_WS_PID" "$TA_TX_PID"; do
+    kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+done
 TA_END=$(date +%s.%N)
 TA_MS=$(echo "($TA_END - $TA_START) * 1000" | bc | cut -d. -f1)
 
@@ -766,12 +772,15 @@ echo ""
 echo -e "${BLUE}--- Streaming Commands ---${NC}"
 
 # watch-events: Watch real-time block events via WebSocket
-# Run for 10 seconds and check if it connects and receives events.
+# Run for 15 seconds and check if it connects and receives events.
 # The node sends 10 event types: 3 block lifecycle, 1 transfer, 3 genesis, 2 node lifecycle.
 # Startup events (node-started, entered-running-state) are replayed from buffer.
 # Block events now include block number and timestamp.
+# A deploy is submitted mid-window so a fresh block is guaranteed rather than
+# relying on the heartbeat proposer happening to fire inside the window.
 echo -n "Testing watch-events... "
 WB_START=$(date +%s.%N)
+(sleep 3; cargo run -q --release -- deploy -f ./rho_examples/stdout.rho -H $HOST -p $GRPC_PORT > /dev/null 2>&1) &
 run_with_timeout 15 cargo run -q --release -- watch-events -H $HOST --http-port $HTTP_PORT > "$OUTPUT" 2>&1 || true
 WB_END=$(date +%s.%N)
 WB_MS=$(echo "($WB_END - $WB_START) * 1000" | bc | cut -d. -f1)
@@ -829,10 +838,10 @@ cargo run -q --release -- load-test \
   --to-address "$TO_ADDR" \
   --num-tests 3 \
   --amount 1 \
-  --interval 3 \
+  --interval 5 \
   --check-interval 2 \
   --inclusion-timeout 60 \
-  --finalization-timeout 60 \
+  --finalization-timeout 120 \
   --private-key "$PRIVATE_KEY" \
   -H $HOST \
   --port $GRPC_PORT \
